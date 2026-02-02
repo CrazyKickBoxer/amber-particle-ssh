@@ -50,3 +50,4 @@ Thumbs.db
 # Uncomment if you want to exclude these:
 # technical_manual.html
 # technical_manual.pdf
+src/vendor/

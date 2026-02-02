@@ -262,7 +262,7 @@ public:
             
             // BLOCK CURSOR (0x2588) - Simulated with Hatching/Scribble
             // BLOCK CURSOR (0x2588 maps to 219 in CP437)
-            case 219: // Full Block (CP437)
+            // case 219: // Full Block (CP437) - Already handled above
             case 0x258B: // Left Heavy
             case 0x258C: // Left Half
                      // Draw a tight hatch/spiral to look "solid"

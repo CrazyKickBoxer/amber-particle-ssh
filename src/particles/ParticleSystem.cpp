@@ -440,6 +440,8 @@ void ParticleSystem::updateParticlesFromTerminal(const TerminalModel& model, int
             uint8_t fontCharIndex = mapUnicodeToCP437(unicode);
             if (unicode == 0) fontCharIndex = 32;
 
+            bool isBlockChar = (fontCharIndex == 0x2588 || fontCharIndex == 219);
+
             // GHOST FIX: If it's a SPACE (32) and NO background color/inverse, 
             // we MUST hide particles immediately.
             // Otherwise, vector renderer might skip "empty" segments and leave old particles.
@@ -585,6 +587,8 @@ void ParticleSystem::updateParticlesFromTerminal(const TerminalModel& model, int
             }
 
             else if (m_font->type() == FontType::Vector) {
+                    std::vector<VectorSegment> segments;
+                    if (m_font) segments = m_font->getSegments(unicode);
                     
                     // SPACE HANDLING: If Space (32) has a background color (or is inverse),
                     // treat it as a BLOCK CHAR (0x2588) so visual scanning fills it.
@@ -744,114 +748,10 @@ void ParticleSystem::updateParticlesFromTerminal(const TerminalModel& model, int
                          m_velData[currentIdx*4 + 0] = 0.0f; // Reset vel
                     }
             }
-                                              m_posData[currentIdx*4 + 1] += (gen->generateDouble()-0.5f)*100.0f;
-                                              
-                                              // BURN EFFECT: Neon Red on ignition
-                                              m_colorData[currentIdx*4 + 0] = 1.0f;
-                                              m_colorData[currentIdx*4 + 1] = 0.1f; 
-                                              m_colorData[currentIdx*4 + 2] = 0.1f; 
-                                          }
-                                      }
-                                      m_posData[currentIdx*4 + 2] = m_targetData[currentIdx*4 + 2];
-                                      m_posData[currentIdx*4 + 3] = m_targetData[currentIdx*4 + 3];
-                                  }
-                             }
-                         }
-                     }
-                } else {
-                    // STANDARD VECTOR RENDER
-                    int totalTarget = 64 * m_density;
-                    if (segments.empty()) totalTarget = 0;
-                    int particlesPerSeg = segments.empty() ? 0 : (totalTarget / segments.size());
-                    
-                    for (const auto& seg : segments) {
-                        for (int i = 0; i < particlesPerSeg; ++i) {
-                             if (pIdx >= particlesPerCell) break; 
-                             size_t currentIdx = baseIdx + pIdx;
-                             pIdx++;
-                             if (currentIdx >= (size_t)m_maxParticles) break;
-                             if (currentIdx > maxChangeIdx) maxChangeIdx = currentIdx;
 
-                             float t = (float)i / (float)particlesPerSeg;
-                             float thickness = 0.08f; 
-                             float jx = (gen->generateDouble() - 0.5f) * thickness * charWidth;
-                             float jy = (gen->generateDouble() - 0.5f) * thickness * charHeight;
-                             
-                             float segX = (seg.x1 + (seg.x2 - seg.x1) * t) * charWidth;
-                             float segY = (seg.y1 + (seg.y2 - seg.y1) * t) * charHeight;
+            // Garbage lines removed
 
-                             m_targetData[currentIdx*4 + 0] = startX + segX + jx;
-                             m_targetData[currentIdx*4 + 1] = startY + segY + jy;
-                             m_targetData[currentIdx*4 + 2] = 0.0f;
-                             m_targetData[currentIdx*4 + 3] = 2.0f; 
 
-                             float rVal=0, gVal=0, bVal=0;
-                             if (useTrueColor) { rVal=tcR; gVal=tcG; bVal=tcB; }
-                             else {
-                                 if (colorToUse==0) { 
-                                     if (m_theme == THEME_CYBERPUNK) { rVal=1.0f; gVal=1.0f; bVal=1.0f; } 
-                                     else { rVal=0.15f; gVal=0.15f; bVal=0.15f; }
-                                 } else if (colorToUse == 1) { rVal=1.0f; gVal=0.2f; bVal=0.2f; }
-                                          else if (colorToUse == 2) { rVal=0.2f; gVal=1.0f; bVal=0.2f; }
-                                          else if (colorToUse == 4) { rVal=0.2f; gVal=0.4f; bVal=1.0f; }
-                                          else if (colorToUse == 7) { rVal=0.9f; gVal=0.9f; bVal=0.9f; } 
-                                          else { rVal=1.0f; gVal=0.59f; bVal=0.04f; } 
-                             }
-
-                             m_colorData[currentIdx*4 + 0] = rVal;
-                             m_colorData[currentIdx*4 + 1] = gVal;
-                             m_colorData[currentIdx*4 + 2] = bVal;
-                             m_colorData[currentIdx*4 + 3] = 1.0f; 
-                             
-                             // VITAL: Clear extra data (Shimmer flag) for Vector Particles
-                             // Otherwise they might inherit "isTextPixel=1" from previous usage!
-                             m_extraData[currentIdx*4 + 0] = 0.0f; 
-                             
-                             // ANIMATION FIX
-                             if (charChanged || m_posData[currentIdx*4+3] == 0.0f) {
-                                  m_posData[currentIdx*4 + 0] = m_targetData[currentIdx*4 + 0];
-                                  m_posData[currentIdx*4 + 1] = m_targetData[currentIdx*4 + 1];
-                                  
-                                  if (charChanged) {
-                                      m_posData[currentIdx*4 + 0] += (gen->generateDouble()-0.5f)*200.0f;
-                                      m_posData[currentIdx*4 + 1] += (gen->generateDouble()-0.5f)*200.0f;
-                                      
-                                      // BURN EFFECT: Neon Red on ignition
-                                      m_colorData[currentIdx*4 + 0] = 1.0f;
-                                      m_colorData[currentIdx*4 + 1] = 0.1f; 
-                                      m_colorData[currentIdx*4 + 2] = 0.1f; 
-                                  }
-                             }
-                             // Always sync size/z
-                             m_posData[currentIdx*4 + 2] = m_targetData[currentIdx*4 + 2];
-                             m_posData[currentIdx*4 + 3] = m_targetData[currentIdx*4 + 3];
-                        }
-                    }
-                }
-
-                
-                // Fill remaining particles with hidden
-                while (pIdx < particlesPerCell) {
-                     size_t currentIdx = baseIdx + pIdx;
-                     pIdx++;
-                     if (currentIdx >= (size_t)m_maxParticles) break;
-                     if (currentIdx * 4 + 3 >= m_posData.size()) break; // Extra safety
-                     m_posData[currentIdx*4 + 3] = 0.0f; 
-                     m_targetData[currentIdx*4 + 0] = -10000.0f;
-                     
-                     // Reset velocity
-                     m_velData[currentIdx*4 + 0] = 0.0f;
-                     m_velData[currentIdx*4 + 1] = 0.0f;
-                     m_velData[currentIdx*4 + 2] = 0.0f;
-                     
-                     // EXPLOSION COLOR (White on removal)
-                     m_colorData[currentIdx*4 + 0] = 1.0f;
-                     m_colorData[currentIdx*4 + 1] = 1.0f;
-                     m_colorData[currentIdx*4 + 2] = 1.0f;
-                     m_colorData[currentIdx*4 + 3] = 0.5f; // Fade
-                }
-
-            }
         }
     }
 
