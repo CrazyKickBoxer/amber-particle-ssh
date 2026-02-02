@@ -1,0 +1,52 @@
+# Build directories
+build/
+CMakeFiles/
+AmberParticleSSH_autogen/
+.qt/
+
+# CMake generated files
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.ninja
+.ninja_*
+compile_commands.json
+
+# Compiled binaries
+AmberParticleSSH
+*.o
+*.a
+*.so
+*.dylib
+
+# Qt generated
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+*.moc
+
+# Backups (keep source clean)
+*_backup/
+backups/
+*.tar.gz
+*.bak
+*~
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Debug
+debug.log
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated docs (keep source, not output)
+# Uncomment if you want to exclude these:
+# technical_manual.html
+# technical_manual.pdf

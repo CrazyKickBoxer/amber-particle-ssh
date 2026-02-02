@@ -1,0 +1,208 @@
+#version 450 core
+
+layout(local_size_x = 256) in;
+
+layout(std430, binding = 0) buffer PosBuffer {
+    vec4 positions[]; // x, y, z, size
+};
+
+layout(std430, binding = 1) buffer VelBuffer {
+    vec4 velocities[]; // vx, vy, vz, padding
+};
+
+layout(std430, binding = 2) buffer TargetBuffer {
+    vec4 targets[]; // tx, ty, tz, t_size
+};
+
+layout(std430, binding = 3) buffer ExtraBuffer {
+    vec4 extras[]; // x=pulse, y=flicker, z=radius, w=spawnDelay
+};
+
+layout(std430, binding = 4) buffer ColorBuffer {
+    vec4 colors[]; // r, g, b, a
+};
+
+uniform float deltaTime;
+uniform float elapsedTime; // Total elapsed time since start
+uniform vec2 bounds;
+uniform int appMode;
+uniform int debugMode;
+uniform float uSpringK;
+uniform float uDrag;
+uniform float uShimmerBase;
+uniform int uStyle; // 0=Normal, 1=Twist
+uniform vec3 uShockwave; // x, y, startTime
+
+// Pseudo-random function (Gold Noise)
+float random(vec2 xy) {
+    return fract(tan(distance(xy*1.61803398874989484820459, xy)*xy.x) * xy.y);
+}
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    
+    vec4 p = positions[id];
+    vec4 v = velocities[id];
+    vec4 t = targets[id];
+    vec4 e = extras[id];
+    
+    // No spawn delay - particles animate immediately
+    
+    // Application mode: instant snap to target
+    if (appMode == 1) {
+        positions[id] = t;
+        velocities[id] = vec4(0.0);
+        return;
+    }
+
+    // Skip offscreen particles
+    if (t.x < -500.0) return;
+
+    // No spawn delay - particles animate immediately
+    
+    // Application mode: instant snap to target
+    if (appMode == 1) {
+        positions[id] = t;
+        velocities[id] = vec4(0.0);
+        return;
+    }
+
+    
+    // === CRT DOT MATRIX EFFECT ===
+    // Particles at target with visible animated shimmer
+    // NOTE: Colors are NOT modified here to prevent accumulation bugs
+    
+    // PHYSICS: Spring force towards target
+    vec2 diff = t.xy - p.xy;
+    float dist = length(diff);
+    
+    // Spring K: Map generic slider value (e.g. 0.1 to 50) to useful Spring Constant
+    // Boost low values so they aren't "frozen".
+    float safeK = max(uSpringK, 1.0); 
+    float k = safeK * 4.0; // 4x boost. Slider 1.0 -> K=4.0. Slider 10 -> K=40.
+    
+    // Drag: Slider 0.0 (Flowy) -> 0.96 (Low damping)
+    //       Slider 1.0 (Sticky) -> 0.60 (High damping)
+    float safeDrag = clamp(uDrag, 0.0, 1.0);
+    float drag_multiplier = mix(0.96, 0.60, safeDrag);
+    
+    // Stability: Clamp dt to prevent explosions on lag spikes
+    float dt = min(deltaTime, 0.05);
+    
+    if (dist > 1.0) {
+       vec2 accel = diff * k;
+       
+       // NEBULA TWIST (Style 1)
+       if (uStyle == 1) {
+           // Add tangential force (spiral)
+           vec2 dir = normalize(diff);
+           vec2 tangent = vec2(-dir.y, dir.x);
+           
+           // Make twist strength proportional to distance to maintain spiral angle
+           // Multiplier > 1.0 means tangential force > radial force (very spiral)
+           // Multiplier 1.0 means 45 degree spiral
+           // Multiplier 0.5 means slight spiral
+           float twistStrength = (k * dist) * 1.5; 
+           
+           accel += tangent * twistStrength;
+       }
+       
+               // DIGITAL RAIN (Style 2)
+       else if (uStyle == 2) {
+           // Gravity: Always fall down until hitting target Y
+           // Ignore X spring mostly? No, let it slide into column.
+           
+           // If above target, apply gravity
+           if (p.y < t.y) {
+               accel.y += 1000.0; // Gravity down
+               // Weak X spring to keep it in column
+               accel.x = (t.x - p.x) * k * 0.5;
+           } else {
+               // Below or at target: standard spring
+               accel = diff * k; // Snap to place
+           }
+       }
+       
+       // QUANTUM FLUX (Style 3)
+       else if (uStyle == 3) {
+           // Teleportation / Jitter
+           // High frequency noise on position
+           float noise = random(vec2(id, elapsedTime));
+           
+           // If far, teleport closer occasionally
+           if (noise > 0.95) {
+                // Teleport 20% of the way there
+                p.xy += diff * 0.2;
+           }
+           
+           // Add chaotic velocity
+           accel += vec2(random(p.xy)-0.5, random(p.yx)-0.5) * k * 5.0;
+       }
+       
+       // SONIC BOOM (Style 4)
+       // Standard spring, but added Shockwave
+       // Logic handled below
+       
+       // MAGNETIC ASSEMBLE (Style 5)
+       else if (uStyle == 5) {
+           // Clumping / Swarming
+           // Add noise to target to create "fake" cluster points?
+           // Or add tangential force that oscillates?
+           // Create a "Swarm" effect by adding sine wave to velocity
+           accel.x += sin(p.y * 0.1 + elapsedTime * 5.0) * k * 0.5;
+           accel.y += cos(p.x * 0.1 + elapsedTime * 5.0) * k * 0.5;
+       }
+
+       v.xy += accel * dt;
+       v.xy *= drag_multiplier;
+       p.xy += v.xy * dt;
+    } else {
+       // Snap when close - eliminates all oscillation
+       p.xy = t.xy;
+       v.xy = vec2(0.0);
+       
+       // QUANTUM FLUX: Jitter even when snapped (unstable hologram)
+       if (uStyle == 3) {
+           float jitter = 2.0;
+           if (random(vec2(elapsedTime, id)) > 0.9) {
+               p.x += (random(vec2(id, elapsedTime*1.1))-0.5) * jitter;
+           }
+       }
+    }
+    
+    // SONIC BOOM SHOCKWAVE (Active for all styles if triggered?)
+    // Let's make it active only for Style 4 or All? User asked for Style 4.
+    if (uStyle == 4 && uShockwave.z > 0.0) {
+        float waveAge = elapsedTime - uShockwave.z;
+        if (waveAge > 0.0 && waveAge < 1.0) { // 1 second duration
+            float waveRadius = waveAge * 1000.0; // Expand to 1000px
+            float waveWidth = 50.0;
+            
+            vec2 dToWave = p.xy - uShockwave.xy;
+            float distToCenter = length(dToWave);
+            
+            // If particle is in the wave band
+            if (distToCenter > waveRadius - waveWidth && distToCenter < waveRadius + waveWidth) {
+                // Push outward
+                vec2 dir = normalize(dToWave);
+                float strength = (1.0 - waveAge) * 10000.0; // Strong impulse
+                v.xy += dir * strength * dt;
+                
+                // Displace position slightly to break static status
+                p.xy += dir * 2.0; 
+            }
+        }
+    }
+    
+    // SHIMMER
+    float shimmerSpeed = uShimmerBase + e.x; 
+    float shimmerRadius = 0.02; // Tiny - almost invisible
+    float angle = elapsedTime * shimmerSpeed + e.y * 6.28;
+    
+    p.x += cos(angle) * shimmerRadius; 
+    p.y += sin(angle) * shimmerRadius;
+
+    positions[id] = p;
+    velocities[id] = v;
+    // colors[id] = c; // DON'T MODIFY - prevents accumulation
+}
